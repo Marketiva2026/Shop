@@ -17,10 +17,16 @@ import VendorShopPage from './pages/public/VendorShop';
 
 // Client
 import Cart from './pages/client/Cart';
+import Checkout from './pages/client/Checkout';
 import Orders from './pages/client/Orders';
+import OrderDetail from './pages/client/OrderDetail';
 import Profile from './pages/client/Profile';
 import Wallet from './pages/client/Wallet';
 import Referral from './pages/client/Referral';
+
+// Payment
+import PaymentReturn from './pages/payment/PaymentReturn';
+import PaymentDemo from './pages/payment/PaymentDemo';
 
 // Vendor
 import VendorDashboard from './pages/vendor/Dashboard';
@@ -100,10 +106,24 @@ export default function App() {
             </RoleGuard>
           </AuthGuard>
         }/>
+        <Route path="/checkout" element={
+          <AuthGuard>
+            <RoleGuard allowedRoles={['client', 'vendeur']}>
+              <Checkout/>
+            </RoleGuard>
+          </AuthGuard>
+        }/>
         <Route path="/commandes" element={
           <AuthGuard>
             <RoleGuard allowedRoles={['client']}>
               <Orders/>
+            </RoleGuard>
+          </AuthGuard>
+        }/>
+        <Route path="/commandes/:id" element={
+          <AuthGuard>
+            <RoleGuard allowedRoles={['client']}>
+              <OrderDetail/>
             </RoleGuard>
           </AuthGuard>
         }/>
@@ -274,6 +294,14 @@ export default function App() {
             </SuperAdminGuard>
           </AuthGuard>
         }/>
+
+        {/* ─── Payment ─── */}
+        <Route path="/paiement/retour" element={
+          <AuthGuard>
+            <PaymentReturn/>
+          </AuthGuard>
+        }/>
+        <Route path="/paiement/demo" element={<PaymentDemo/>}/>
 
         {/* ─── Utility ─── */}
         <Route path="/acces-refuse" element={<AccessDenied/>}/>

@@ -1,31 +1,16 @@
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PublicNav from '../../components/layout/PublicNav';
 import useCartStore from '../../store/cart.store';
 import useAuthStore from '../../store/auth.store';
-import { creerCommande } from '../../api/order.api';
-import { showToast } from '../../components/ui/Toast';
 
 export default function Cart() {
   const { items, removeItem, updateQuantite, clear, total } = useCartStore();
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
 
-  const handleCommander = async () => {
-    if (!token) { navigate('/connexion'); return; }
-    setLoading(true);
-    try {
-      const res = await creerCommande({
-        items: items.map((i) => ({ produit_id: i.produit_id, quantite: i.quantite })),
-        mode_livraison: 'point_relais',
-      });
-      clear();
-      showToast('✅ Commande créée !', 'success');
-      navigate(`/commandes/${res.data.commande_id}`);
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Erreur lors de la commande.', 'error');
-    } finally { setLoading(false); }
+  const handleCommander = () => {
+    if (!token) { navigate('/connexion', { state: { from: '/panier' } }); return; }
+    navigate('/checkout');
   };
 
   if (!items.length) return (
@@ -94,8 +79,8 @@ export default function Cart() {
                 <span className="text-primary">{montantTotal.toLocaleString()} FCFA</span>
               </div>
             </div>
-            <button onClick={handleCommander} disabled={loading} className="btn-primary w-full justify-center py-3">
-              {loading ? '...' : token ? '💳 Commander' : '🔐 Se connecter pour commander'}
+            <button onClick={handleCommander} className="btn-primary w-full justify-center py-3">
+              {token ? '💳 Commander' : '🔐 Se connecter pour commander'}
             </button>
             <button onClick={clear} className="w-full text-xs text-white/30 hover:text-red-400 mt-3 transition-colors">
               Vider le panier

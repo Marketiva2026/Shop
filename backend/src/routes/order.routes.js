@@ -12,6 +12,7 @@ router.post('/', [body('items').isArray({ min: 1 })], validate, ctrl.creerComman
 router.get('/', ctrl.mesCommandes);
 router.get('/:id', ctrl.getCommande);
 router.post('/:id/annuler', ctrl.annulerCommande);
+router.post('/:id/confirmer-reception', ctrl.confirmerReception);
 router.post('/:id/litige', [body('motif').notEmpty(), body('description').notEmpty()], validate, ctrl.ouvrirLitige);
 
 module.exports = router;

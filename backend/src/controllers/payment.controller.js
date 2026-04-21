@@ -66,4 +66,25 @@ const cashRelais = async (req, res) => {
   }
 };
 
-module.exports = { initier, statut, webhook, cashRelais };
+// POST /api/paiements/demo/confirmer (dev mode only — simulates CinetPay success callback)
+const confirmerDemo = async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ message: 'Not found.' });
+  }
+  try {
+    const { transaction_id } = req.body;
+    if (!transaction_id) return res.status(400).json({ succes: false, message: 'transaction_id requis.' });
+
+    await traiterWebhook({
+      cpm_trans_id: transaction_id,
+      cpm_result: '00',
+      cpm_amount: '0',
+    });
+    return res.json({ succes: true });
+  } catch (err) {
+    console.error('[Demo] ConfirmerDemo:', err);
+    return res.status(500).json({ succes: false, message: 'Erreur.' });
+  }
+};
+
+module.exports = { initier, statut, webhook, cashRelais, confirmerDemo };

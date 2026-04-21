@@ -8,6 +8,7 @@ const { validate } = require('../middleware/validate');
 const router = Router();
 
 router.post('/webhook/cinetpay', ctrl.webhook);
+router.post('/demo/confirmer', ctrl.confirmerDemo);
 
 router.use(auth);
 router.post('/initier', [body('commande_id').isInt(), body('methode').notEmpty()], validate, ctrl.initier);

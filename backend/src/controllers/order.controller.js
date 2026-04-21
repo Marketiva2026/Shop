@@ -5,7 +5,7 @@ const { creer: creerNotif } = require('../services/notification.service');
 // POST /api/commandes
 const creerCommande = async (req, res) => {
   try {
-    const { items, mode_livraison, adresse_id, relais_id, notes, utiliser_points } = req.body;
+    const { items, mode_livraison, adresse_id, relais_id, notes, utiliser_points, methode_paiement } = req.body;
     if (!items?.length) return res.status(400).json({ succes: false, message: 'Panier vide.' });
 
     // Valider les produits
@@ -63,7 +63,7 @@ const creerCommande = async (req, res) => {
 
       await conn.execute(
         'INSERT INTO paiements (commande_id, methode, montant) VALUES (?, ?, ?)',
-        [cid, 'mtn_momo', montantTotal]
+        [cid, methode_paiement || 'mtn_momo', montantTotal]
       );
 
       return cid;
@@ -134,10 +134,37 @@ const ouvrirLitige = async (req, res) => {
   res.status(201).json({ succes: true, reference });
 };
 
+// POST /api/commandes/:id/confirmer-reception
+const confirmerReception = async (req, res) => {
+  try {
+    const { libererEscrow } = require('../services/payment.service');
+    const commande = await queryOne(
+      'SELECT * FROM commandes WHERE id = ? AND client_id = ? AND statut IN ("expediee","au_relais","livree")',
+      [req.params.id, req.user.id]
+    );
+    if (!commande) return res.status(404).json({ succes: false, message: 'Commande introuvable ou non éligible.' });
+
+    const paiement = await queryOne(
+      'SELECT escrow_libere FROM paiements WHERE commande_id = ?',
+      [commande.id]
+    );
+    if (paiement?.escrow_libere) return res.status(400).json({ succes: false, message: 'Déjà confirmée.' });
+
+    const result = await libererEscrow(commande.id);
+    if (!result.succes) return res.status(400).json(result);
+
+    await creerNotif(req.user.id, '✅ Réception confirmée', `Commande ${commande.reference} confirmée. Merci !`, 'commande');
+    return res.json({ succes: true });
+  } catch (err) {
+    console.error('[Commande] ConfirmerReception:', err);
+    return res.status(500).json({ succes: false, message: 'Erreur serveur.' });
+  }
+};
+
 // GET /api/commandes/relais
 const getRelais = async (_req, res) => {
   const relais = await query('SELECT id, nom, adresse, commune, ville, telephone, heures, colis_en_attente FROM points_relais WHERE est_actif = TRUE');
   res.json({ succes: true, relais });
 };
 
-module.exports = { creerCommande, mesCommandes, getCommande, annulerCommande, ouvrirLitige, getRelais };
+module.exports = { creerCommande, mesCommandes, getCommande, annulerCommande, ouvrirLitige, getRelais, confirmerReception };
