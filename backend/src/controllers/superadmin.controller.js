@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const { query, queryOne } = require('../config/database');
 const { sanitizeHtml } = require('../utils/helpers');
+const settings = require('../services/settings.service');
 
 const BCRYPT_ROUNDS = 12;
 
@@ -332,6 +333,7 @@ const updateConfig = async (req, res) => {
       if (!exists) continue;
       await query('UPDATE config_systeme SET valeur = ? WHERE cle = ?', [String(valeur), cle]);
     }
+    settings.invalidate();
     res.json({ succes: true, message: 'Configuration mise à jour.' });
   } catch (err) {
     res.status(500).json({ succes: false, message: 'Erreur serveur.' });

@@ -138,17 +138,32 @@ const ouvrirLitige = async (req, res) => {
 const confirmerReception = async (req, res) => {
   try {
     const { libererEscrow } = require('../services/payment.service');
+
     const commande = await queryOne(
       'SELECT * FROM commandes WHERE id = ? AND client_id = ? AND statut IN ("expediee","au_relais","livree")',
       [req.params.id, req.user.id]
     );
     if (!commande) return res.status(404).json({ succes: false, message: 'Commande introuvable ou non éligible.' });
 
+    // Escrow already released
     const paiement = await queryOne(
       'SELECT escrow_libere FROM paiements WHERE commande_id = ?',
       [commande.id]
     );
     if (paiement?.escrow_libere) return res.status(400).json({ succes: false, message: 'Déjà confirmée.' });
+
+    // Block if there is an active dispute — give a clear message before touching escrow
+    const litigeActif = await queryOne(
+      "SELECT reference FROM litiges WHERE commande_id = ? AND statut IN ('ouvert','en_cours','escalade')",
+      [commande.id]
+    );
+    if (litigeActif) {
+      return res.status(409).json({
+        succes:  false,
+        message: `Un litige (${litigeActif.reference}) est en cours sur cette commande. L'escrow sera libéré uniquement après résolution par l'administration.`,
+        code:    'DISPUTE_ACTIVE',
+      });
+    }
 
     const result = await libererEscrow(commande.id);
     if (!result.succes) return res.status(400).json(result);

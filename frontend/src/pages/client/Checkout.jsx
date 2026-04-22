@@ -32,6 +32,7 @@ export default function Checkout() {
   const [showNewAddr, setShowNewAddr] = useState(false);
   const [utilisPoints, setUtilisPoints] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
+  const [fraisLivraison, setFraisLivraison] = useState(1500);
 
   // Step 1 — paiement
   const [methode, setMethode] = useState('MOBILE_MONEY');
@@ -46,16 +47,20 @@ export default function Checkout() {
       api.get('/commandes/relais'),
       api.get('/user/adresses'),
       api.get('/user/profil'),
-    ]).then(([r, a, p]) => {
+      api.get('/config/public'),
+    ]).then(([r, a, p, cfg]) => {
       setRelais(r.data.relais || []);
       setAdresses(a.data.adresses || []);
       setUserPoints(p.data.user?.points_wallet || 0);
+      if (cfg.data.config?.frais_livraison_base) {
+        setFraisLivraison(Number(cfg.data.config.frais_livraison_base));
+      }
       const def = a.data.adresses?.find((x) => x.est_defaut);
       if (def) setAdresseId(String(def.id));
     }).catch(() => {});
   }, []);
 
-  const frais = 1500;
+  const frais = fraisLivraison;
   const sousTotal = total();
   const reduction = utilisPoints ? Math.min(userPoints, sousTotal * 0.1) : 0;
   const montantTotal = sousTotal + frais - reduction;

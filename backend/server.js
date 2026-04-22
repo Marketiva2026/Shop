@@ -41,6 +41,7 @@ app.use('/api/paiements',  require('./src/routes/payment.routes'));
 app.use('/api/admin',      require('./src/routes/admin.routes'));
 app.use('/api/superadmin', require('./src/routes/superadmin.routes'));
 app.use('/api/boutiques',  require('./src/routes/boutique.routes'));
+app.use('/api/config',     require('./src/routes/config.routes'));
 
 // ─── Santé ─────────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) =>
@@ -65,6 +66,9 @@ async function start() {
     // Test connexion BDD
     await pool.execute('SELECT 1');
     console.log('✅ Base de données connectée.');
+
+    // Migrations (idempotent — safe on every restart)
+    await require('./src/utils/runMigrations').run();
 
     // Créer le super admin si absent
     const [rows] = await pool.execute("SELECT id FROM users WHERE role = 'super_admin' LIMIT 1");

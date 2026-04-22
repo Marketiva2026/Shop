@@ -36,13 +36,87 @@ const getLitiges = async (req, res) => {
 };
 
 const deciderLitige = async (req, res) => {
-  const { decision, statut } = req.body;
-  const litige = await queryOne('SELECT * FROM litiges WHERE id = ?', [req.params.id]);
-  if (!litige) return res.status(404).json({ succes: false });
-  await query('UPDATE litiges SET statut = ?, decision = ?, resolu_le = NOW(), agent_id = ? WHERE id = ?',
-    [statut, decision, req.user.id, req.params.id]);
-  await creerNotif(litige.client_id, '⚖️ Litige résolu', `Décision : ${decision}`, 'litige');
-  res.json({ succes: true });
+  try {
+    // gagnant: 'client' → refund buyer | 'vendeur' → release escrow to seller
+    const { gagnant, resolution } = req.body;
+    if (!gagnant || !resolution) {
+      return res.status(400).json({ succes: false, message: 'gagnant et resolution obligatoires.' });
+    }
+
+    const litige = await queryOne(
+      `SELECT l.*, cmd.client_id, cmd.reference as commande_ref
+       FROM litiges l JOIN commandes cmd ON cmd.id = l.commande_id
+       WHERE l.id = ?`,
+      [req.params.id]
+    );
+    if (!litige) return res.status(404).json({ succes: false, message: 'Litige introuvable.' });
+
+    if (['resolu_client', 'resolu_vendeur'].includes(litige.statut)) {
+      return res.status(409).json({ succes: false, message: 'Litige déjà résolu.' });
+    }
+
+    if (gagnant === 'client') {
+      // ── Décision en faveur du client : rembourser, bloquer le vendeur ────────
+      await query(
+        `UPDATE paiements SET statut = 'rembourse' WHERE commande_id = ?`,
+        [litige.commande_id]
+      );
+      await query(
+        `UPDATE commandes SET statut = 'annulee' WHERE id = ?`,
+        [litige.commande_id]
+      );
+      await query(
+        `UPDATE litiges SET statut = 'resolu_client', decision = ?, resolu_le = NOW(), agent_id = ? WHERE id = ?`,
+        [resolution, req.user.id, litige.id]
+      );
+
+      creerNotif(litige.client_id, '✅ Litige résolu — remboursement', resolution, 'litige').catch(() => {});
+      creerNotif(litige.vendeur_id, '⚖️ Litige résolu', `Décision en faveur du client. ${resolution}`, 'litige').catch(() => {});
+
+    } else if (gagnant === 'vendeur') {
+      // ── Décision en faveur du vendeur : libérer l'escrow ─────────────────────
+      // La résolution du litige (statut → resolu_vendeur) doit se faire AVANT
+      // l'appel à libererEscrow, sinon la vérification de litige actif bloquerait
+      // la libération.
+      await query(
+        `UPDATE litiges SET statut = 'resolu_vendeur', decision = ?, resolu_le = NOW(), agent_id = ? WHERE id = ?`,
+        [resolution, req.user.id, litige.id]
+      );
+
+      const result = await libererEscrow(litige.commande_id);
+      if (!result.succes) {
+        // Rollback litige update if escrow fails
+        await query(
+          `UPDATE litiges SET statut = 'en_cours', decision = NULL, resolu_le = NULL, agent_id = NULL WHERE id = ?`,
+          [litige.id]
+        );
+        return res.status(400).json(result);
+      }
+
+      creerNotif(litige.vendeur_id, '✅ Litige résolu — paiement libéré', resolution, 'litige').catch(() => {});
+      creerNotif(litige.client_id, '⚖️ Litige résolu', `Décision en faveur du vendeur. ${resolution}`, 'litige').catch(() => {});
+
+    } else {
+      return res.status(400).json({ succes: false, message: "gagnant doit être 'client' ou 'vendeur'." });
+    }
+
+    // Audit log
+    await query(
+      `INSERT INTO logs_activite (user_id, role, action, cible, details)
+       VALUES (?, ?, 'Litige résolu', ?, ?)`,
+      [
+        req.user.id,
+        req.user.role,
+        `Litige #${litige.id} — ${litige.commande_ref}`,
+        JSON.stringify({ gagnant, resolution }),
+      ]
+    ).catch(() => {});
+
+    res.json({ succes: true });
+  } catch (err) {
+    console.error('[Admin] deciderLitige:', err);
+    res.status(500).json({ succes: false, message: 'Erreur serveur.' });
+  }
 };
 
 // ─── FINANCES ────────────────────────────────────────────

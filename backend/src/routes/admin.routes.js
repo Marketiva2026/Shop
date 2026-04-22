@@ -26,8 +26,11 @@ router.patch('/tickets/:id/statut',
 router.get('/litiges',           autoriser('admin_support', SA), ctrl.getLitiges);
 router.patch('/litiges/:id/decision',
   autoriser('admin_support', SA),
-  [body('decision').notEmpty(), body('statut').notEmpty()], validate,
-  logAction('Litige : décision rendue'),
+  [
+    body('gagnant').isIn(['client', 'vendeur']),
+    body('resolution').isString().isLength({ min: 10 }),
+  ],
+  validate,
   ctrl.deciderLitige
 );
 

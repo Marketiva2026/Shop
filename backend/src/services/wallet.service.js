@@ -1,5 +1,6 @@
 const { query, queryOne, transaction } = require('../config/database');
 const { creer: creerNotif } = require('./notification.service');
+const settings = require('./settings.service');
 
 const crediterPoints = async (userId, points, type, description, reference = null, conn = null) => {
   const exec = conn
@@ -37,11 +38,10 @@ const debiterPoints = async (userId, points, description, conn = null) => {
 
 const crediterParrainageAchat = async (commande) => {
   try {
-    const config = await getConfig();
     const taux = [
-      parseFloat(config.gain_parrainage_n1 || 2),
-      parseFloat(config.gain_parrainage_n2 || 1),
-      parseFloat(config.gain_parrainage_n3 || 0.5),
+      await settings.get('gain_parrainage_n1', 2),
+      await settings.get('gain_parrainage_n2', 1),
+      await settings.get('gain_parrainage_n3', 0.5),
     ];
 
     const parrainages = await query(
@@ -79,11 +79,6 @@ const crediterParrainageAchat = async (commande) => {
   } catch (err) {
     console.error('[Wallet] Erreur parrainage:', err.message);
   }
-};
-
-const getConfig = async () => {
-  const rows = await query('SELECT cle, valeur FROM config_systeme');
-  return rows.reduce((acc, r) => ({ ...acc, [r.cle]: r.valeur }), {});
 };
 
 module.exports = { crediterPoints, debiterPoints, crediterParrainageAchat };
