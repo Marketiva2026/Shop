@@ -4,38 +4,9 @@ const { query, queryOne } = require('../config/database');
 const { envoyerOTP, validerOTP } = require('../services/otp.service');
 const { creer: creerNotif } = require('../services/notification.service');
 const { genCodeParrainage } = require('../utils/helpers');
-const { ROLES } = require('../utils/constants');
+const { genTokens, saveSession, getBoutiqueId, REDIRECT_MAP } = require('../utils/auth.utils');
 
 const BCRYPT_ROUNDS = 12;
-
-const genTokens = (user, boutique_id = null) => {
-  const payload = { id: user.id, role: user.role, boutique_id };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '15m' });
-  const refreshToken = jwt.sign({ id: user.id }, process.env.REFRESH_SECRET, { expiresIn: process.env.REFRESH_EXPIRE || '7d' });
-  return { token, refreshToken };
-};
-
-const saveSession = async (userId, refreshToken, req) => {
-  const expireAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const expireStr = expireAt.toISOString().slice(0, 19).replace('T', ' ');
-  await query(
-    'INSERT INTO sessions (user_id, refresh_token, appareil, ip_address, expire_le) VALUES (?, ?, ?, ?, ?)',
-    [userId, refreshToken, req.headers['user-agent']?.substring(0, 200), req.ip, expireStr]
-  );
-};
-
-const REDIRECT_MAP = {
-  super_admin: 'super_admin',
-  admin_support: 'admin',
-  admin_finances: 'admin',
-  admin_vendeurs: 'admin',
-  admin_contenu: 'admin',
-  admin_logistique: 'admin',
-  admin_marketing: 'admin',
-  agent_relais: 'admin',
-  vendeur: 'vendeur',
-  client: 'client',
-};
 
 // POST /api/auth/inscription
 const inscription = async (req, res) => {
@@ -133,11 +104,8 @@ const verifierOtp = async (req, res) => {
 
     await query('UPDATE users SET derniere_connexion = NOW() WHERE id = ?', [user.id]);
 
-    const boutique = user.role === ROLES.VENDEUR
-      ? await queryOne('SELECT id FROM boutiques WHERE vendeur_id = ?', [user.id])
-      : null;
-
-    const { token, refreshToken } = genTokens(user, boutique?.id);
+    const boutiqueId = await getBoutiqueId(user);
+    const { token, refreshToken } = genTokens(user, boutiqueId);
     await saveSession(user.id, refreshToken, req);
 
     const { mot_de_passe: _, ...userSafe } = user;
@@ -172,12 +140,32 @@ const connexion = async (req, res) => {
       return res.status(403).json({ succes: false, message: 'Compte suspendu. Contactez le support.' });
     }
 
-    const mdpOk = await bcrypt.compare(mot_de_passe, user.mot_de_passe);
+    // Google-only accounts have no password — redirect to Google Sign-In
+    if (user.provider === 'google' && !user.mot_de_passe) {
+      return res.status(400).json({
+        succes: false,
+        message: 'Ce compte est lié à Google. Utilisez le bouton "Continuer avec Google".',
+        action: 'google',
+      });
+    }
+
+    const mdpOk = user.mot_de_passe
+      ? await bcrypt.compare(mot_de_passe, user.mot_de_passe)
+      : false;
     if (!mdpOk) {
       return res.status(401).json({ succes: false, message: 'Mot de passe incorrect.' });
     }
 
     if (!user.est_verifie) {
+      // Email-provider accounts use email code, not SMS OTP
+      if (user.provider === 'email') {
+        return res.status(403).json({
+          succes: false,
+          message: 'Compte non vérifié. Vérifiez votre email pour le code de confirmation.',
+          action: 'verify_email',
+          email: user.email,
+        });
+      }
       const otpResult = await envoyerOTP(user.telephone, 'connexion', req.ip);
       return res.status(200).json({
         succes: false,
@@ -190,11 +178,8 @@ const connexion = async (req, res) => {
 
     await query('UPDATE users SET derniere_connexion = NOW() WHERE id = ?', [user.id]);
 
-    const boutique = user.role === ROLES.VENDEUR
-      ? await queryOne('SELECT id FROM boutiques WHERE vendeur_id = ?', [user.id])
-      : null;
-
-    const { token, refreshToken } = genTokens(user, boutique?.id);
+    const boutiqueId = await getBoutiqueId(user);
+    const { token, refreshToken } = genTokens(user, boutiqueId);
     await saveSession(user.id, refreshToken, req);
 
     await query(
@@ -251,12 +236,8 @@ const refresh = async (req, res) => {
     const user = await queryOne('SELECT * FROM users WHERE id = ? AND est_actif = TRUE', [payload.id]);
     if (!user) return res.status(401).json({ succes: false, message: 'Utilisateur introuvable.' });
 
-    // Rotation du refresh token
-    const boutique = user.role === ROLES.VENDEUR
-      ? await queryOne('SELECT id FROM boutiques WHERE vendeur_id = ?', [user.id])
-      : null;
-
-    const { token, refreshToken: newRefresh } = genTokens(user, boutique?.id);
+    const boutiqueId = await getBoutiqueId(user);
+    const { token, refreshToken: newRefresh } = genTokens(user, boutiqueId);
 
     await query('DELETE FROM sessions WHERE id = ?', [session.id]);
     await saveSession(user.id, newRefresh, req);

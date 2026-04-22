@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { body } = require('express-validator');
 const ctrl = require('../controllers/auth.controller');
+const emailCtrl = require('../controllers/email-auth.controller');
 const { validate } = require('../middleware/validate');
 const { auth } = require('../middleware/auth');
 const limiter = require('../middleware/rateLimiter');
@@ -76,5 +77,15 @@ router.post('/reinitialiser-mdp',
 );
 
 router.get('/me', auth, ctrl.me);
+
+// ─── Email-based auth (additive — existing OTP/phone flow unchanged) ────────
+
+// Zod validation is handled inside the controller for these routes
+router.post('/inscription-email',     limiter.auth,                emailCtrl.inscriptionEmail);
+router.post('/verifier-email',        limiter.emailVerification,   emailCtrl.verifierEmail);
+router.post('/renvoyer-code-email',   limiter.emailVerification,   emailCtrl.renvoyerCodeEmail);
+
+// ─── Google OAuth ────────────────────────────────────────────────────────────
+router.post('/google',                limiter.auth,                emailCtrl.connexionGoogle);
 
 module.exports = router;

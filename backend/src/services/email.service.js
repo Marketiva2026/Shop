@@ -151,6 +151,20 @@ const templates = {
     <p>Contactez notre support si vous avez des questions.</p>
     <p style="color:#666">L'équipe MARKETIVA</p>
   `),
+
+  codeVerification: (nom, code) => _wrap(`
+    <h2 style="color:#E84822">Vérifiez votre compte</h2>
+    <p>Bonjour <strong>${nom}</strong>,</p>
+    <p>Voici votre code de vérification MARKETIVA :</p>
+    <div style="text-align:center;margin:28px 0">
+      <span style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#E84822;background:#fff3f0;padding:16px 24px;border-radius:8px;border:2px solid #E84822;display:inline-block">
+        ${code}
+      </span>
+    </div>
+    <p style="color:#555;font-size:14px">Ce code est valable <strong>10 minutes</strong>. Ne le partagez jamais.</p>
+    <p style="color:#888;font-size:12px">Si vous n'avez pas créé de compte sur MARKETIVA, ignorez cet email.</p>
+    <p style="color:#666">L'équipe MARKETIVA</p>
+  `),
 };
 
 module.exports = { envoyerEmail, envoyerEmailAsync, templates };
