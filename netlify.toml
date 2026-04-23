@@ -1,2 +1,3 @@
 \[build\]
-"base = 'Shop/frontend'"
+"base = Shop/frontend"
+
